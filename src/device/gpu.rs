@@ -86,9 +86,18 @@ impl<H: Hal, T: Transport> VirtIOGpu<H, T> {
     }
 
     /// Get the resolution (width, height).
-    pub fn resolution(&mut self) -> Result<(u32, u32)> {
+    pub fn real_resolution(&mut self) -> Result<(u32, u32)> {
         let display_info = self.get_display_info()?;
         Ok((display_info.rect.width, display_info.rect.height))
+    }
+
+    /// Get the drawable resolution.
+    pub fn drawable_resolution(&self) -> Result<(u32, u32)> {
+        if let Some(rect) = self.rect {
+            Ok((rect.width, rect.height))
+        } else {
+            Err(Error::NotReady)
+        }
     }
 
     /// Setup framebuffer
@@ -96,24 +105,29 @@ impl<H: Hal, T: Transport> VirtIOGpu<H, T> {
         // get display info
         let display_info = self.get_display_info()?;
         info!("=> {:?}", display_info);
-        self.rect = Some(display_info.rect);
+        self.setup_framebuffer_sized(display_info.rect.width, display_info.rect.height)
+    }
 
+    /// Setup framebuffer
+    pub fn setup_framebuffer_sized(&mut self, width: u32, height: u32) -> Result<&mut [u8]> {
+        let rect = Rect { x: 0, y: 0, width: width, height: height };
+        self.rect = Some(rect);
         // create resource 2d
         self.resource_create_2d(
             RESOURCE_ID_FB,
-            display_info.rect.width,
-            display_info.rect.height,
+            width,
+            height,
         )?;
 
         // alloc continuous pages for the frame buffer
-        let size = display_info.rect.width * display_info.rect.height * 4;
+        let size = width * height * 4;
         let frame_buffer_dma = Dma::new(pages(size as usize), BufferDirection::DriverToDevice)?;
 
         // resource_attach_backing
         self.resource_attach_backing(RESOURCE_ID_FB, frame_buffer_dma.paddr() as u64, size)?;
 
         // map frame buffer to screen
-        self.set_scanout(display_info.rect, SCANOUT_ID, RESOURCE_ID_FB)?;
+        self.set_scanout(rect, SCANOUT_ID, RESOURCE_ID_FB)?;
 
         // SAFETY: `Dma::new` guarantees that the pointer returned from
         // `raw_slice` is non-null, aligned, and the allocation is zeroed. We
