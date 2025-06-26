@@ -86,17 +86,17 @@ impl<H: Hal, T: Transport> VirtIOGpu<H, T> {
     }
 
     /// Get the resolution (width, height).
-    pub fn real_resolution(&mut self) -> Result<(u32, u32)> {
+    pub fn resolution(&mut self) -> Result<(u32, u32)> {
         let display_info = self.get_display_info()?;
         Ok((display_info.rect.width, display_info.rect.height))
     }
 
     /// Get the drawable resolution.
-    pub fn drawable_resolution(&self) -> Result<(u32, u32)> {
+    pub fn drawable_resolution(&mut self) -> Result<(u32, u32)> {
         if let Some(rect) = self.rect {
             Ok((rect.width, rect.height))
         } else {
-            Err(Error::NotReady)
+            self.resolution()
         }
     }
 
